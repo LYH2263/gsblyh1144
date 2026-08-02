@@ -102,6 +102,10 @@ public class ConditionService {
         if (!SqlSanitizer.isValidFieldName(tableName)) {
             throw new IllegalArgumentException("非法表名: " + tableName);
         }
+        // 只允许查询业务表，禁止直查 sys_user/reminder_* 等内部表
+        if (!SqlSanitizer.isBusinessTable(tableName)) {
+            throw new IllegalArgumentException("禁止访问非业务表");
+        }
         if (whereClause != null && !whereClause.trim().isEmpty() && !"1=1".equals(whereClause.trim())) {
             if (!SqlSanitizer.isSafe(whereClause)) {
                 throw new IllegalArgumentException("WHERE语句包含不安全的关键字");

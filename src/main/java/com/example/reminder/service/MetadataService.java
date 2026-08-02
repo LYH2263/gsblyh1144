@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import com.example.reminder.util.SqlSanitizer;
+
 import java.util.*;
 
 @Service
@@ -17,7 +19,8 @@ public class MetadataService {
     private JdbcTemplate jdbcTemplate;
 
     /**
-     * 获取数据库中所有表名和注释
+     * 获取数据库中所有表名和注释。
+     * 仅返回业务表白名单内的表，内部表（sys_user、reminder_*）不予暴露。
      */
     public List<Map<String, String>> getAllTables() {
         List<Map<String, String>> tables = new ArrayList<>();
@@ -27,8 +30,13 @@ public class MetadataService {
                             "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' " +
                             "ORDER BY TABLE_NAME");
             for (Map<String, Object> row : rows) {
+                String tableName = String.valueOf(row.get("TABLE_NAME"));
+                // 仅暴露业务表白名单内的表
+                if (!SqlSanitizer.isBusinessTable(tableName)) {
+                    continue;
+                }
                 Map<String, String> table = new HashMap<>();
-                table.put("tableName", String.valueOf(row.get("TABLE_NAME")));
+                table.put("tableName", tableName);
                 table.put("tableComment", String.valueOf(row.getOrDefault("TABLE_COMMENT", "")));
                 tables.add(table);
             }
@@ -39,9 +47,13 @@ public class MetadataService {
     }
 
     /**
-     * 获取指定表的所有字段信息
+     * 获取指定表的所有字段信息。
+     * 直查非业务表一律拒绝。
      */
     public List<Map<String, String>> getTableColumns(String tableName) {
+        if (!SqlSanitizer.isBusinessTable(tableName)) {
+            throw new IllegalArgumentException("禁止访问非业务表");
+        }
         List<Map<String, String>> columns = new ArrayList<>();
         try {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -65,9 +77,13 @@ public class MetadataService {
     }
 
     /**
-     * 预览表数据（前10条）
+     * 预览表数据（前10条）。
+     * 直查非业务表一律拒绝。
      */
     public List<Map<String, Object>> previewTableData(String tableName) {
+        if (!SqlSanitizer.isBusinessTable(tableName)) {
+            throw new IllegalArgumentException("禁止访问非业务表");
+        }
         try {
             return jdbcTemplate.queryForList("SELECT * FROM `" + tableName + "` LIMIT 10");
         } catch (Exception e) {

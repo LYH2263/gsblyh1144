@@ -21,12 +21,20 @@ public class MetadataController {
     }
 
     @GetMapping("/columns/{tableName}")
-    public Result<List<Map<String, String>>> getColumns(@PathVariable String tableName) {
-        return Result.success(metadataService.getTableColumns(tableName));
+    public Result<?> getColumns(@PathVariable String tableName) {
+        try {
+            return Result.success(metadataService.getTableColumns(tableName));
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     @GetMapping("/preview/{tableName}")
-    public Result<List<Map<String, Object>>> previewData(@PathVariable String tableName) {
-        return Result.success(metadataService.previewTableData(tableName));
+    public Result<?> previewData(@PathVariable String tableName) {
+        try {
+            return Result.success(metadataService.previewTableData(tableName));
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
     }
 }

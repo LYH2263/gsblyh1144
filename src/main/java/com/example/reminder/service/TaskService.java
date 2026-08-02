@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.reminder.entity.ReminderCondition;
 import com.example.reminder.entity.ReminderTask;
+import com.example.reminder.exception.AccessDeniedException;
 import com.example.reminder.mapper.ReminderConditionMapper;
 import com.example.reminder.mapper.ReminderTaskMapper;
 import com.example.reminder.util.CronUtils;
@@ -58,12 +59,38 @@ public class TaskService {
     }
 
     /**
+     * 归属与角色校验：ADMIN 可操作全部任务；USER 仅能操作 create_user 等于本人的任务。
+     * 越权抛出 AccessDeniedException，由全局异常处理器统一转换为 code=403。
+     */
+    private void checkTaskAccess(ReminderTask task, String currentUser, String role) {
+        if (task == null) {
+            return;
+        }
+        if ("ADMIN".equals(role)) {
+            return;
+        }
+        if (currentUser == null || !currentUser.equals(task.getCreateUser())) {
+            throw new AccessDeniedException();
+        }
+    }
+
+    /**
+     * 校验当前用户是否有权操作指定任务（供手动触发等场景调用）。
+     */
+    public void checkTaskAccess(Long taskId, String currentUser, String role) {
+        ReminderTask task = taskMapper.selectById(taskId);
+        checkTaskAccess(task, currentUser, role);
+    }
+
+    /**
      * 获取任务详情（含条件列表）
      */
-    public Map<String, Object> getTaskDetail(Long taskId) {
+    public Map<String, Object> getTaskDetail(Long taskId, String currentUser, String role) {
         ReminderTask task = taskMapper.selectById(taskId);
         if (task == null)
             return null;
+
+        checkTaskAccess(task, currentUser, role);
 
         List<ReminderCondition> conditions = conditionMapper.selectList(
                 new QueryWrapper<ReminderCondition>()
@@ -111,7 +138,14 @@ public class TaskService {
      * 更新定时任务
      */
     @Transactional
-    public ReminderTask updateTask(ReminderTask task, String conditionsJson) {
+    public ReminderTask updateTask(ReminderTask task, String conditionsJson, String currentUser, String role) {
+        // 归属校验：以库中现有记录的 create_user 为准
+        ReminderTask existing = taskMapper.selectById(task.getId());
+        if (existing == null) {
+            throw new RuntimeException("任务不存在");
+        }
+        checkTaskAccess(existing, currentUser, role);
+
         // 重新生成Cron表达式
         String cron = CronUtils.generateCron(
                 task.getFrequencyType(), task.getFrequencyDay(),
@@ -144,7 +178,13 @@ public class TaskService {
      * 删除定时任务
      */
     @Transactional
-    public void deleteTask(Long taskId) {
+    public void deleteTask(Long taskId, String currentUser, String role) {
+        ReminderTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            return;
+        }
+        checkTaskAccess(task, currentUser, role);
+
         schedulerService.cancelTask(taskId);
         conditionMapper.delete(new QueryWrapper<ReminderCondition>().eq("task_id", taskId));
         taskMapper.deleteById(taskId);
@@ -154,10 +194,12 @@ public class TaskService {
     /**
      * 切换任务状态
      */
-    public void toggleTaskStatus(Long taskId) {
+    public void toggleTaskStatus(Long taskId, String currentUser, String role) {
         ReminderTask task = taskMapper.selectById(taskId);
         if (task == null)
             return;
+
+        checkTaskAccess(task, currentUser, role);
 
         int newStatus = (task.getStatus() != null && task.getStatus() == 1) ? 0 : 1;
         task.setStatus(newStatus);

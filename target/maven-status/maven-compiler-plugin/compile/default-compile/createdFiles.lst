@@ -1,0 +1,3 @@
+com\example\reminder\exception\GlobalExceptionHandler.class
+com\example\reminder\service\DingTalkService$DingTalkResult.class
+com\example\reminder\exception\AccessDeniedException.class

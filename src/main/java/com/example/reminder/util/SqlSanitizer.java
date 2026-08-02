@@ -12,6 +12,23 @@ public class SqlSanitizer {
             "LOAD_FILE", "BENCHMARK", "SLEEP"));
 
     /**
+     * 业务表白名单：元数据列表与直查（columns/preview/条件查询）只允许这三张表，
+     * 其余（sys_user、reminder_task、reminder_condition、reminder_log 等内部表）一律拒绝。
+     */
+    public static final Set<String> ALLOWED_TABLES = new HashSet<>(Arrays.asList(
+            "demo_employee", "demo_order", "demo_project"));
+
+    /**
+     * 判断表名是否为允许访问的业务表（大小写不敏感）。
+     */
+    public static boolean isBusinessTable(String tableName) {
+        if (tableName == null) {
+            return false;
+        }
+        return ALLOWED_TABLES.contains(tableName.trim().toLowerCase());
+    }
+
+    /**
      * 检查WHERE语句是否安全
      */
     public static boolean isSafe(String sql) {
