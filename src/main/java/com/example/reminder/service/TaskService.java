@@ -24,6 +24,15 @@ public class TaskService {
 
     private static final Logger log = LoggerFactory.getLogger(TaskService.class);
 
+    /**
+     * 越权访问异常：统一由 Controller 映射为 code=403
+     */
+    public static class AccessDeniedException extends RuntimeException {
+        public AccessDeniedException() {
+            super("无权操作该资源");
+        }
+    }
+
     @Autowired
     private ReminderTaskMapper taskMapper;
 
@@ -58,10 +67,10 @@ public class TaskService {
     }
 
     /**
-     * 获取任务详情（含条件列表）
+     * 获取任务详情（含条件列表），校验任务归属
      */
-    public Map<String, Object> getTaskDetail(Long taskId) {
-        ReminderTask task = taskMapper.selectById(taskId);
+    public Map<String, Object> getTaskDetail(Long taskId, String currentUser, String role) {
+        ReminderTask task = checkOwnership(taskId, currentUser, role);
         if (task == null)
             return null;
 
@@ -108,10 +117,12 @@ public class TaskService {
     }
 
     /**
-     * 更新定时任务
+     * 更新定时任务，校验任务归属
      */
     @Transactional
-    public ReminderTask updateTask(ReminderTask task, String conditionsJson) {
+    public ReminderTask updateTask(ReminderTask task, String conditionsJson, String currentUser, String role) {
+        checkOwnership(task.getId(), currentUser, role);
+
         // 重新生成Cron表达式
         String cron = CronUtils.generateCron(
                 task.getFrequencyType(), task.getFrequencyDay(),
@@ -141,10 +152,11 @@ public class TaskService {
     }
 
     /**
-     * 删除定时任务
+     * 删除定时任务，校验任务归属
      */
     @Transactional
-    public void deleteTask(Long taskId) {
+    public void deleteTask(Long taskId, String currentUser, String role) {
+        checkOwnership(taskId, currentUser, role);
         schedulerService.cancelTask(taskId);
         conditionMapper.delete(new QueryWrapper<ReminderCondition>().eq("task_id", taskId));
         taskMapper.deleteById(taskId);
@@ -152,10 +164,10 @@ public class TaskService {
     }
 
     /**
-     * 切换任务状态
+     * 切换任务状态，校验任务归属
      */
-    public void toggleTaskStatus(Long taskId) {
-        ReminderTask task = taskMapper.selectById(taskId);
+    public void toggleTaskStatus(Long taskId, String currentUser, String role) {
+        ReminderTask task = checkOwnership(taskId, currentUser, role);
         if (task == null)
             return;
 
@@ -170,6 +182,31 @@ public class TaskService {
         }
 
         log.info("切换任务状态: {} (ID={}, 新状态={})", task.getTaskName(), taskId, newStatus == 1 ? "启用" : "停用");
+    }
+
+    /**
+     * 手动触发执行任务，校验任务归属后委托调度器执行
+     */
+    public void triggerTask(Long taskId, String currentUser, String role) {
+        checkOwnership(taskId, currentUser, role);
+        schedulerService.triggerTask(taskId);
+    }
+
+    /**
+     * 校验任务归属：ADMIN 可操作全部任务，USER 只能操作本人创建的任务
+     *
+     * @return 任务实体；任务不存在时返回 null
+     * @throws AccessDeniedException 越权访问时抛出
+     */
+    private ReminderTask checkOwnership(Long taskId, String currentUser, String role) {
+        ReminderTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            return null;
+        }
+        if (!"ADMIN".equals(role) && !currentUser.equals(task.getCreateUser())) {
+            throw new AccessDeniedException();
+        }
+        return task;
     }
 
     /**
