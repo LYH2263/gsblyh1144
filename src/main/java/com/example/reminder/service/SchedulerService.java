@@ -184,9 +184,11 @@ public class SchedulerService {
 
                 try {
                     if (task.getDingtalkWebhook() != null && !task.getDingtalkWebhook().trim().isEmpty()) {
-                        success = dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
+                        DingTalkService.DingTalkResult result =
+                                dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
+                        success = result.isSuccess();
                         if (!success) {
-                            errorMsg = "钉钉接口返回失败";
+                            errorMsg = result.getErrmsg() != null ? result.getErrmsg() : "钉钉接口返回失败";
                         }
                     } else {
                         // 未配置webhook，仅记录日志
