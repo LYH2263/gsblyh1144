@@ -1,6 +1,7 @@
 package com.example.reminder.util;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -10,6 +11,28 @@ public class SqlSanitizer {
             "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE", "TRUNCATE",
             "EXEC", "EXECUTE", "GRANT", "REVOKE", "INTO OUTFILE", "INTO DUMPFILE",
             "LOAD_FILE", "BENCHMARK", "SLEEP"));
+
+    /**
+     * 允许被提醒任务直接查询的业务表白名单
+     */
+    private static final Set<String> BUSINESS_TABLES = Collections.unmodifiableSet(
+            new HashSet<>(Arrays.asList("demo_employee", "demo_order", "demo_project")));
+
+    /**
+     * 判断表名是否属于允许访问的业务表
+     */
+    public static boolean isBusinessTable(String tableName) {
+        return tableName != null && BUSINESS_TABLES.contains(tableName);
+    }
+
+    /**
+     * 校验表名属于业务表白名单，非业务表抛出 IllegalArgumentException
+     */
+    public static void assertBusinessTable(String tableName) {
+        if (!isBusinessTable(tableName)) {
+            throw new IllegalArgumentException("禁止访问非业务表");
+        }
+    }
 
     /**
      * 检查WHERE语句是否安全

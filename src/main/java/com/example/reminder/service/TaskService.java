@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.reminder.entity.ReminderCondition;
 import com.example.reminder.entity.ReminderTask;
+import com.example.reminder.exception.ForbiddenException;
 import com.example.reminder.mapper.ReminderConditionMapper;
 import com.example.reminder.mapper.ReminderTaskMapper;
 import com.example.reminder.util.CronUtils;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class TaskService {
@@ -60,10 +62,12 @@ public class TaskService {
     /**
      * 获取任务详情（含条件列表）
      */
-    public Map<String, Object> getTaskDetail(Long taskId) {
+    public Map<String, Object> getTaskDetail(Long taskId, String currentUser, String role) {
         ReminderTask task = taskMapper.selectById(taskId);
         if (task == null)
             return null;
+
+        checkOwnership(task, currentUser, role);
 
         List<ReminderCondition> conditions = conditionMapper.selectList(
                 new QueryWrapper<ReminderCondition>()
@@ -111,7 +115,13 @@ public class TaskService {
      * 更新定时任务
      */
     @Transactional
-    public ReminderTask updateTask(ReminderTask task, String conditionsJson) {
+    public ReminderTask updateTask(ReminderTask task, String conditionsJson, String currentUser, String role) {
+        ReminderTask existing = taskMapper.selectById(task.getId());
+        if (existing == null) {
+            throw new IllegalArgumentException("任务不存在");
+        }
+        checkOwnership(existing, currentUser, role);
+
         // 重新生成Cron表达式
         String cron = CronUtils.generateCron(
                 task.getFrequencyType(), task.getFrequencyDay(),
@@ -144,7 +154,13 @@ public class TaskService {
      * 删除定时任务
      */
     @Transactional
-    public void deleteTask(Long taskId) {
+    public void deleteTask(Long taskId, String currentUser, String role) {
+        ReminderTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            return;
+        }
+        checkOwnership(task, currentUser, role);
+
         schedulerService.cancelTask(taskId);
         conditionMapper.delete(new QueryWrapper<ReminderCondition>().eq("task_id", taskId));
         taskMapper.deleteById(taskId);
@@ -154,10 +170,12 @@ public class TaskService {
     /**
      * 切换任务状态
      */
-    public void toggleTaskStatus(Long taskId) {
+    public void toggleTaskStatus(Long taskId, String currentUser, String role) {
         ReminderTask task = taskMapper.selectById(taskId);
         if (task == null)
             return;
+
+        checkOwnership(task, currentUser, role);
 
         int newStatus = (task.getStatus() != null && task.getStatus() == 1) ? 0 : 1;
         task.setStatus(newStatus);
@@ -170,6 +188,27 @@ public class TaskService {
         }
 
         log.info("切换任务状态: {} (ID={}, 新状态={})", task.getTaskName(), taskId, newStatus == 1 ? "启用" : "停用");
+    }
+
+    /**
+     * 手动触发执行任务（鉴权后委托给 SchedulerService）
+     */
+    public void triggerTask(Long taskId, String currentUser, String role) {
+        ReminderTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("任务不存在");
+        }
+        checkOwnership(task, currentUser, role);
+        schedulerService.triggerTask(taskId);
+    }
+
+    /**
+     * 校验当前用户对任务的操作权限：ADMIN 全部可操作，USER 仅能操作本人创建的任务
+     */
+    private void checkOwnership(ReminderTask task, String currentUser, String role) {
+        if (!"ADMIN".equals(role) && !Objects.equals(currentUser, task.getCreateUser())) {
+            throw new ForbiddenException();
+        }
     }
 
     /**

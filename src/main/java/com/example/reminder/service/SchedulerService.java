@@ -179,23 +179,19 @@ public class SchedulerService {
                 String message = buildMessage(task.getMessageTemplate(), row);
                 String receiver = getFieldValue(row, task.getReceiverField());
 
-                boolean success = false;
+                boolean success;
                 String errorMsg = null;
 
-                try {
-                    if (task.getDingtalkWebhook() != null && !task.getDingtalkWebhook().trim().isEmpty()) {
-                        success = dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
-                        if (!success) {
-                            errorMsg = "钉钉接口返回失败";
-                        }
-                    } else {
-                        // 未配置webhook，仅记录日志
-                        success = true;
-                        log.info("任务[{}]无钉钉Webhook配置，仅记录: {} -> {}", task.getTaskName(), receiver, message);
+                if (task.getDingtalkWebhook() != null && !task.getDingtalkWebhook().trim().isEmpty()) {
+                    DingTalkSendResult result = dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
+                    success = result.isSuccess();
+                    if (!success) {
+                        errorMsg = result.getErrmsg();
                     }
-                } catch (Exception e) {
-                    errorMsg = e.getMessage();
-                    log.error("发送提醒消息失败", e);
+                } else {
+                    // 未配置webhook，仅记录日志
+                    success = true;
+                    log.info("任务[{}]无钉钉Webhook配置，仅记录: {} -> {}", task.getTaskName(), receiver, message);
                 }
 
                 // 记录发送日志

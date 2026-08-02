@@ -99,6 +99,8 @@ public class ConditionService {
      * 执行查询，返回匹配的数据行
      */
     public List<Map<String, Object>> executeQuery(String tableName, String whereClause) {
+        SqlSanitizer.assertBusinessTable(tableName);
+
         if (!SqlSanitizer.isValidFieldName(tableName)) {
             throw new IllegalArgumentException("非法表名: " + tableName);
         }
