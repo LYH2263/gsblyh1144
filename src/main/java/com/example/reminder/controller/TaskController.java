@@ -4,8 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.example.reminder.entity.ReminderCondition;
 import com.example.reminder.entity.ReminderTask;
 import com.example.reminder.entity.SysUser;
+import com.example.reminder.exception.ForbiddenException;
+import com.example.reminder.exception.NonBusinessTableException;
 import com.example.reminder.service.ConditionService;
-import com.example.reminder.service.SchedulerService;
 import com.example.reminder.service.TaskService;
 import com.example.reminder.util.Result;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,9 +28,6 @@ public class TaskController {
 
     @Autowired
     private TaskService taskService;
-
-    @Autowired
-    private SchedulerService schedulerService;
 
     @Autowired
     private ConditionService conditionService;
@@ -56,8 +54,9 @@ public class TaskController {
      * 获取任务详情
      */
     @GetMapping("/{id}")
-    public Result<?> getTaskDetail(@PathVariable Long id) {
-        Map<String, Object> detail = taskService.getTaskDetail(id);
+    public Result<?> getTaskDetail(@PathVariable Long id, HttpSession session) {
+        SysUser user = (SysUser) session.getAttribute("currentUser");
+        Map<String, Object> detail = taskService.getTaskDetail(id, user.getUsername(), user.getRole());
         if (detail == null) {
             return Result.error("任务不存在");
         }
@@ -96,6 +95,10 @@ public class TaskController {
 
             ReminderTask created = taskService.createTask(task, conditionsJson);
             return Result.success("创建成功", created);
+        } catch (NonBusinessTableException e) {
+            throw e;
+        } catch (ForbiddenException e) {
+            throw e;
         } catch (Exception e) {
             log.error("创建任务失败", e);
             return Result.error("创建失败: " + e.getMessage());
@@ -106,8 +109,10 @@ public class TaskController {
      * 更新任务
      */
     @PutMapping("/{id}")
-    public Result<?> updateTask(@PathVariable Long id, @RequestBody Map<String, Object> params) {
+    public Result<?> updateTask(@PathVariable Long id, @RequestBody Map<String, Object> params, HttpSession session) {
         try {
+            SysUser user = (SysUser) session.getAttribute("currentUser");
+
             ReminderTask task = new ReminderTask();
             task.setId(id);
             task.setTaskName((String) params.get("taskName"));
@@ -130,8 +135,12 @@ public class TaskController {
                 conditionsJson = objectMapper.writeValueAsString(params.get("conditions"));
             }
 
-            ReminderTask updated = taskService.updateTask(task, conditionsJson);
+            ReminderTask updated = taskService.updateTask(task, conditionsJson, user.getUsername(), user.getRole());
             return Result.success("更新成功", updated);
+        } catch (NonBusinessTableException e) {
+            throw e;
+        } catch (ForbiddenException e) {
+            throw e;
         } catch (Exception e) {
             log.error("更新任务失败", e);
             return Result.error("更新失败: " + e.getMessage());
@@ -142,8 +151,9 @@ public class TaskController {
      * 删除任务
      */
     @DeleteMapping("/{id}")
-    public Result<?> deleteTask(@PathVariable Long id) {
-        taskService.deleteTask(id);
+    public Result<?> deleteTask(@PathVariable Long id, HttpSession session) {
+        SysUser user = (SysUser) session.getAttribute("currentUser");
+        taskService.deleteTask(id, user.getUsername(), user.getRole());
         return Result.success("删除成功");
     }
 
@@ -151,8 +161,9 @@ public class TaskController {
      * 切换任务状态
      */
     @PostMapping("/{id}/toggle")
-    public Result<?> toggleStatus(@PathVariable Long id) {
-        taskService.toggleTaskStatus(id);
+    public Result<?> toggleStatus(@PathVariable Long id, HttpSession session) {
+        SysUser user = (SysUser) session.getAttribute("currentUser");
+        taskService.toggleTaskStatus(id, user.getUsername(), user.getRole());
         return Result.success("状态切换成功");
     }
 
@@ -160,10 +171,13 @@ public class TaskController {
      * 手动触发执行任务
      */
     @PostMapping("/{id}/trigger")
-    public Result<?> triggerTask(@PathVariable Long id) {
+    public Result<?> triggerTask(@PathVariable Long id, HttpSession session) {
         try {
-            schedulerService.triggerTask(id);
+            SysUser user = (SysUser) session.getAttribute("currentUser");
+            taskService.triggerTask(id, user.getUsername(), user.getRole());
             return Result.success("任务已触发执行");
+        } catch (ForbiddenException e) {
+            throw e;
         } catch (Exception e) {
             return Result.error("触发失败: " + e.getMessage());
         }
@@ -197,6 +211,8 @@ public class TaskController {
             result.put("data", data);
             result.put("total", data.size());
             return Result.success(result);
+        } catch (NonBusinessTableException e) {
+            throw e;
         } catch (Exception e) {
             return Result.error("预览失败: " + e.getMessage());
         }

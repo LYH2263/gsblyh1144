@@ -1,6 +1,7 @@
 package com.example.reminder.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.example.reminder.dto.DingTalkSendResult;
 import com.example.reminder.entity.ReminderCondition;
 import com.example.reminder.entity.ReminderLog;
 import com.example.reminder.entity.ReminderTask;
@@ -184,9 +185,10 @@ public class SchedulerService {
 
                 try {
                     if (task.getDingtalkWebhook() != null && !task.getDingtalkWebhook().trim().isEmpty()) {
-                        success = dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
+                        DingTalkSendResult result = dingTalkService.sendMessage(task.getDingtalkWebhook(), message);
+                        success = result.isSuccess();
                         if (!success) {
-                            errorMsg = "钉钉接口返回失败";
+                            errorMsg = result.getErrmsg();
                         }
                     } else {
                         // 未配置webhook，仅记录日志

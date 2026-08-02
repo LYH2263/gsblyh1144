@@ -1,15 +1,35 @@
 package com.example.reminder.util;
 
+import com.example.reminder.exception.NonBusinessTableException;
+
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 public class SqlSanitizer {
 
+    public static final String NON_BUSINESS_TABLE_MESSAGE = "禁止访问非业务表";
+
     private static final Set<String> BLOCKED_KEYWORDS = new HashSet<>(Arrays.asList(
             "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE", "TRUNCATE",
             "EXEC", "EXECUTE", "GRANT", "REVOKE", "INTO OUTFILE", "INTO DUMPFILE",
             "LOAD_FILE", "BENCHMARK", "SLEEP"));
+
+    /**
+     * 允许被提醒任务查询与元数据访问的业务表白名单
+     */
+    private static final Set<String> ALLOWED_TABLES = Collections.unmodifiableSet(
+            new HashSet<>(Arrays.asList("demo_employee", "demo_order", "demo_project")));
+
+    /**
+     * 校验表名是否属于允许访问的业务表
+     */
+    public static void checkAllowedTable(String tableName) {
+        if (tableName == null || !ALLOWED_TABLES.contains(tableName)) {
+            throw new NonBusinessTableException(NON_BUSINESS_TABLE_MESSAGE);
+        }
+    }
 
     /**
      * 检查WHERE语句是否安全

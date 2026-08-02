@@ -96,9 +96,10 @@ public class ConditionService {
     }
 
     /**
-     * 执行查询，返回匹配的数据行
+     * 执行查询，返回匹配的数据行。仅允许查询业务表白名单内的表。
      */
     public List<Map<String, Object>> executeQuery(String tableName, String whereClause) {
+        SqlSanitizer.checkAllowedTable(tableName);
         if (!SqlSanitizer.isValidFieldName(tableName)) {
             throw new IllegalArgumentException("非法表名: " + tableName);
         }
@@ -119,9 +120,10 @@ public class ConditionService {
     }
 
     /**
-     * 预览查询SQL（不实际执行）
+     * 预览查询SQL（不实际执行）。仅允许业务表白名单内的表。
      */
     public String buildPreviewSql(String tableName, String whereClause) {
+        SqlSanitizer.checkAllowedTable(tableName);
         String sql = "SELECT * FROM `" + tableName + "`";
         if (whereClause != null && !whereClause.trim().isEmpty()) {
             sql += " WHERE " + whereClause;
