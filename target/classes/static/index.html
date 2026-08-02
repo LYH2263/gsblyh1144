@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="定时提醒系统 - 基于数据库的智能定时提醒管理平台">
+    <title>定时提醒系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.4.4/dist/index.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- ========== 登录页 ========== -->
+        <div v-if="!currentUser" class="login-wrapper">
+            <div class="login-card">
+                <div class="logo">
+                    <h1>⏰ 定时提醒系统</h1>
+                    <p>基于数据库的智能定时提醒管理平台</p>
+                </div>
+                <el-form :model="loginForm" @keyup.enter="handleLogin">
+                    <el-form-item>
+                        <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large" id="login-username">
+                            <template #prefix><span style="margin-right:4px">👤</span></template>
+                        </el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" size="large"
+                            show-password id="login-password">
+                            <template #prefix><span style="margin-right:4px">🔒</span></template>
+                        </el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="handleLogin" :loading="loginLoading" size="large"
+                            id="btn-login">登 录</el-button>
+                    </el-form-item>
+                </el-form>
+
+            </div>
+        </div>
+
+        <!-- ========== 主布局 ========== -->
+        <div v-else class="app-layout">
+            <!-- 侧边栏 -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h2>
+                        <span class="icon">⏰</span>
+                        <span>提醒系统</span>
+                    </h2>
+                </div>
+                <nav class="sidebar-nav">
+                    <div class="nav-item" :class="{active: activeMenu === 'tasks'}" @click="activeMenu = 'tasks'"
+                        id="nav-tasks">
+                        <span class="nav-icon">📋</span>
+                        <span>任务管理</span>
+                    </div>
+                    <div class="nav-item" :class="{active: activeMenu === 'logs'}"
+                        @click="activeMenu = 'logs'; loadLogs()" id="nav-logs">
+                        <span class="nav-icon">📝</span>
+                        <span>发送日志</span>
+                    </div>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-info">
+                        <div class="user-avatar">{{ currentUser.nickname ? currentUser.nickname.charAt(0) : 'U' }}</div>
+                        <div class="user-detail">
+                            <div class="name">{{ currentUser.nickname || currentUser.username }}</div>
+                            <div class="role">{{ currentUser.role === 'ADMIN' ? '管理员' : '普通用户' }}</div>
+                        </div>
+                        <button class="btn-logout" @click="handleLogout" title="退出登录" id="btn-logout">⏻</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="main-content">
+                <!-- ========== 任务管理 ========== -->
+                <template v-if="activeMenu === 'tasks'">
+                    <div class="content-header">
+                        <h3>任务管理</h3>
+                        <el-button type="primary" @click="openTaskForm(null)" id="btn-create-task">
+                            ＋ 新建任务
+                        </el-button>
+                    </div>
+                    <div class="content-body">
+                        <!-- 搜索栏 -->
+                        <div class="search-bar">
+                            <el-input v-model="taskSearch" placeholder="搜索任务名称或目标表..." clearable style="width:320px"
+                                @clear="loadTasks" @keyup.enter="loadTasks" id="task-search-input">
+                                <template #prefix><span>🔍</span></template>
+                            </el-input>
+                            <el-button @click="loadTasks" id="btn-search-tasks">搜索</el-button>
+                            <el-button @click="taskSearch=''; loadTasks()">重置</el-button>
+                        </div>
+
+                        <!-- 任务列表 -->
+                        <div class="page-card">
+                            <el-table :data="taskList" v-loading="taskLoading" stripe style="width:100%"
+                                id="task-table">
+                                <el-table-column label="ID" width="70">
+                                    <template #default="{ row }">{{ row.id }}</template>
+                                </el-table-column>
+                                <el-table-column prop="taskName" label="任务名称" min-width="160">
+                                    <template #default="{ row }">
+                                        <strong>{{ row.taskName }}</strong>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="targetTable" label="目标表" width="150">
+                                    <template #default="{ row }">
+                                        <el-tag size="small" type="info">{{ row.targetTable }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="执行频率" width="160">
+                                    <template #default="{ row }">
+                                        {{ getFrequencyText(row) }}
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="条件模式" width="100">
+                                    <template #default="{ row }">
+                                        <el-tag :type="row.conditionMode==='VISUAL' ? '' : 'warning'" size="small">
+                                            {{ row.conditionMode === 'VISUAL' ? '可视化' : '编辑器' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="状态" width="100">
+                                    <template #default="{ row }">
+                                        <span class="status-tag" :class="row.status === 1 ? 'active' : 'inactive'">
+                                            <span class="status-dot"
+                                                :class="row.status === 1 ? 'active' : 'inactive'"></span>
+                                            {{ row.status === 1 ? '运行中' : '已停用' }}
+                                        </span>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="创建人" width="100">
+                                    <template #default="{ row }">{{ row.createUser || '-' }}</template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="280" fixed="right">
+                                    <template #default="{ row }">
+                                        <el-button size="small" type="primary" link @click="openTaskForm(row.id)"
+                                            id="'btn-edit-' + row.id">编辑</el-button>
+                                        <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'" link
+                                            @click="toggleTask(row.id)">
+                                            {{ row.status === 1 ? '停用' : '启用' }}
+                                        </el-button>
+                                        <el-button size="small" type="success" link
+                                            @click="triggerTask(row.id)">执行</el-button>
+                                        <el-button size="small" type="danger" link @click="deleteTask(row)"
+                                            id="'btn-delete-' + row.id">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                                <el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize"
+                                    :total="taskTotal" :page-sizes="[10,20,50]" layout="total, sizes, prev, pager, next"
+                                    @current-change="loadTasks" @size-change="loadTasks" id="task-pagination" />
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ========== 发送日志 ========== -->
+                <template v-if="activeMenu === 'logs'">
+                    <div class="content-header">
+                        <h3>发送日志</h3>
+                    </div>
+                    <div class="content-body">
+                        <div class="search-bar">
+                            <el-input v-model="logSearch" placeholder="搜索任务名称/接收方/内容..." clearable style="width:320px"
+                                @clear="loadLogs" @keyup.enter="loadLogs" id="log-search-input">
+                                <template #prefix><span>🔍</span></template>
+                            </el-input>
+                            <el-button @click="loadLogs" id="btn-search-logs">搜索</el-button>
+                            <el-button @click="logSearch=''; loadLogs()">重置</el-button>
+                        </div>
+                        <div class="page-card">
+                            <el-table :data="logList" v-loading="logLoading" stripe style="width:100%" id="log-table">
+                                <el-table-column label="ID" width="70">
+                                    <template #default="{ row }">{{ row.id || '暂无' }}</template>
+                                </el-table-column>
+                                <el-table-column label="任务ID" width="80">
+                                    <template #default="{ row }">{{ row.taskId || '暂无' }}</template>
+                                </el-table-column>
+                                <el-table-column label="任务名称" min-width="150">
+                                    <template #default="{ row }">{{ row.taskName || '暂无' }}</template>
+                                </el-table-column>
+                                <el-table-column label="发送时间" width="180">
+                                    <template #default="{ row }">{{ row.sendTime || '暂无' }}</template>
+                                </el-table-column>
+                                <el-table-column label="接收方" width="140">
+                                    <template #default="{ row }">{{ row.receiver || '暂无' }}</template>
+                                </el-table-column>
+                                <el-table-column label="发送内容" min-width="200">
+                                    <template #default="{ row }">
+                                        <span :title="row.sendContent">{{ row.sendContent || '暂无' }}</span>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="状态" width="100">
+                                    <template #default="{ row }">
+                                        <el-tag :type="row.sendStatus === 1 ? 'success' : 'danger'" size="small">
+                                            {{ row.sendStatus === 1 ? '成功' : '失败' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="错误信息" min-width="150">
+                                    <template #default="{ row }">
+                                        <span :title="row.errorMsg">{{ row.errorMsg || '-' }}</span>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                                <el-pagination v-model:current-page="logPage" v-model:page-size="logPageSize"
+                                    :total="logTotal" :page-sizes="[15,30,50]" layout="total, sizes, prev, pager, next"
+                                    @current-change="loadLogs" @size-change="loadLogs" id="log-pagination" />
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- ========== 任务表单对话框 ========== -->
+        <el-dialog v-model="taskFormVisible" :title="taskFormMode === 'create' ? '新建定时任务' : '编辑定时任务'" width="860px"
+            :close-on-click-modal="false" destroy-on-close id="task-form-dialog">
+            <el-form :model="taskForm" label-width="110px">
+                <!-- 基本信息 -->
+                <div class="form-section">
+                    <div class="form-section-title">基本信息</div>
+                    <el-form-item label="任务名称" required>
+                        <el-input v-model="taskForm.taskName" placeholder="请输入任务名称" id="input-task-name" />
+                    </el-form-item>
+                    <el-form-item label="目标数据表" required>
+                        <el-select v-model="taskForm.targetTable" placeholder="请选择数据表" filterable
+                            @change="onTableChange" style="width:100%" id="select-table">
+                            <el-option v-for="t in tables" :key="t.tableName"
+                                :label="t.tableName + (t.tableComment ? ' (' + t.tableComment + ')' : '')"
+                                :value="t.tableName" />
+                        </el-select>
+                    </el-form-item>
+                </div>
+
+                <!-- 执行频率 -->
+                <div class="form-section">
+                    <div class="form-section-title">执行频率</div>
+                    <el-form-item label="频率类型" required>
+                        <el-radio-group v-model="taskForm.frequencyType" id="radio-frequency">
+                            <el-radio-button label="DAILY">每日</el-radio-button>
+                            <el-radio-button label="WEEKLY">每周</el-radio-button>
+                            <el-radio-button label="MONTHLY">每月</el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item v-if="taskForm.frequencyType === 'WEEKLY'" label="星期" required>
+                        <el-select v-model="taskForm.frequencyDay" placeholder="请选择" style="width:200px"
+                            id="select-weekday">
+                            <el-option :value="1" label="周一" /><el-option :value="2" label="周二" />
+                            <el-option :value="3" label="周三" /><el-option :value="4" label="周四" />
+                            <el-option :value="5" label="周五" /><el-option :value="6" label="周六" />
+                            <el-option :value="7" label="周日" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item v-if="taskForm.frequencyType === 'MONTHLY'" label="日期" required>
+                        <el-select v-model="taskForm.frequencyDay" placeholder="请选择日期" style="width:200px"
+                            id="select-monthday">
+                            <el-option v-for="d in 31" :key="d" :value="d" :label="d + '日'" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="执行时间" required>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <el-select v-model="taskForm.frequencyHour" style="width:120px" placeholder="时"
+                                id="select-hour">
+                                <el-option v-for="h in 24" :key="h-1" :value="h-1"
+                                    :label="(h-1 < 10 ? '0' : '') + (h-1) + '时'" />
+                            </el-select>
+                            <span>:</span>
+                            <el-select v-model="taskForm.frequencyMinute" style="width:120px" placeholder="分"
+                                id="select-minute">
+                                <el-option v-for="m in 60" :key="m-1" :value="m-1"
+                                    :label="(m-1 < 10 ? '0' : '') + (m-1) + '分'" />
+                            </el-select>
+                        </div>
+                    </el-form-item>
+                </div>
+
+                <!-- 触发条件 -->
+                <div class="form-section">
+                    <div class="form-section-title">数据触发条件</div>
+                    <el-form-item label="条件模式">
+                        <el-radio-group v-model="taskForm.conditionMode" id="radio-condition-mode">
+                            <el-radio-button label="VISUAL">可视化模式</el-radio-button>
+                            <el-radio-button label="EDITOR">编辑器模式</el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+
+                    <!-- 可视化模式 -->
+                    <div v-if="taskForm.conditionMode === 'VISUAL'">
+                        <div v-for="(cond, idx) in taskForm.conditions" :key="idx" class="condition-group">
+                            <div class="condition-row">
+                                <div v-if="idx > 0" class="logic-tag">
+                                    <el-select v-model="cond.logicOperator" size="small" style="width:80px">
+                                        <el-option :label="'并且'" :value="'AND'" />
+                                        <el-option :label="'或者'" :value="'OR'" />
+                                    </el-select>
+                                </div>
+                                <div v-else class="logic-tag" style="width:80px;color:#909399;font-size:13px;">
+                                    条件{{idx+1}}</div>
+
+                                <el-select v-model="cond.fieldName" placeholder="选择字段" size="default"
+                                    style="width:160px" filterable>
+                                    <el-option v-for="col in currentColumns" :key="col.columnName"
+                                        :label="col.columnName + (col.columnComment ? ' (' + col.columnComment + ')' : '')"
+                                        :value="col.columnName" />
+                                </el-select>
+
+                                <el-select v-model="cond.operator" placeholder="操作符" size="default" style="width:130px">
+                                    <el-option v-for="op in operatorOptions" :key="op.value" :label="op.label"
+                                        :value="op.value" />
+                                </el-select>
+
+                                <el-select v-model="cond.compareType" size="default" style="width:100px">
+                                    <el-option v-for="ct in compareTypeOptions" :key="ct.value" :label="ct.label"
+                                        :value="ct.value" />
+                                </el-select>
+
+                                <template v-if="cond.compareType === 'FIELD'">
+                                    <el-select v-model="cond.compareValue" placeholder="比较字段" size="default"
+                                        style="width:160px" filterable>
+                                        <el-option v-for="col in currentColumns" :key="col.columnName"
+                                            :label="col.columnName + (col.columnComment ? ' (' + col.columnComment + ')' : '')"
+                                            :value="col.columnName" />
+                                    </el-select>
+                                </template>
+                                <template v-else>
+                                    <el-input v-model="cond.compareValue" placeholder="比较值" size="default"
+                                        style="width:160px" />
+                                </template>
+
+                                <div class="condition-actions">
+                                    <el-button size="small" type="danger" circle @click="removeCondition(idx)"
+                                        :disabled="taskForm.conditions.length <= 1">
+                                        ✕
+                                    </el-button>
+                                </div>
+                            </div>
+                        </div>
+                        <el-button type="primary" link @click="addCondition" id="btn-add-condition"
+                            style="margin-top:8px;">
+                            ＋ 添加条件
+                        </el-button>
+                    </div>
+
+                    <!-- 编辑器模式 -->
+                    <div v-if="taskForm.conditionMode === 'EDITOR'" class="sql-editor-wrapper">
+                        <div class="sql-editor-left">
+                            <textarea v-model="taskForm.conditionSql" class="sql-textarea"
+                                placeholder="请输入WHERE条件语句，例如：&#10;status = '待处理' AND amount > 10000" ref="sqlTextarea"
+                                id="sql-textarea"></textarea>
+                            <div class="template-hint" style="margin-top:8px;">
+                                <p>💡 提示：请输入SQL WHERE子句，不需要写SELECT或WHERE关键字</p>
+                                <p>示例: <code>status = '待处理' AND due_date &lt; CURDATE()</code></p>
+                            </div>
+                        </div>
+                        <div class="field-list-panel">
+                            <div class="panel-title">📋 字段列表（点击插入）</div>
+                            <div v-for="col in currentColumns" :key="col.columnName" class="field-item"
+                                @click="insertField(col.columnName)">
+                                <span class="field-name">{{ col.columnName }}</span>
+                                <span class="field-comment" :title="col.columnComment">{{ col.columnComment ||
+                                    col.dataType }}</span>
+                            </div>
+                            <div v-if="currentColumns.length === 0"
+                                style="padding:20px;text-align:center;color:#909399;font-size:13px;">
+                                请先选择目标数据表
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 预览按钮 -->
+                    <div style="margin-top:12px;">
+                        <el-button type="success" @click="previewQuery" :loading="previewLoading"
+                            :disabled="!taskForm.targetTable" id="btn-preview">
+                            🔍 预览查询结果
+                        </el-button>
+                    </div>
+
+                    <!-- 预览结果 -->
+                    <div v-if="previewData" class="preview-result">
+                        <div class="preview-sql">{{ previewData.sql }}</div>
+                        <el-tag type="info" style="margin-bottom:8px;">匹配 {{ previewData.total }} 条数据</el-tag>
+                        <el-table :data="previewData.data" stripe size="small" max-height="250" style="margin-top:8px;">
+                            <el-table-column v-for="key in previewColumns" :key="key" :prop="key" :label="key"
+                                min-width="120" show-overflow-tooltip />
+                        </el-table>
+                    </div>
+                </div>
+
+                <!-- 提醒配置 -->
+                <div class="form-section">
+                    <div class="form-section-title">提醒配置</div>
+                    <el-form-item label="接收方字段" required>
+                        <el-select v-model="taskForm.receiverField" placeholder="选择作为接收方的字段" style="width:100%"
+                            filterable id="select-receiver">
+                            <el-option v-for="col in currentColumns" :key="col.columnName"
+                                :label="col.columnName + (col.columnComment ? ' (' + col.columnComment + ')' : '')"
+                                :value="col.columnName" />
+                        </el-select>
+                        <div class="template-hint" style="margin-top:6px;">
+                            <p>💡 选择数据表中包含接收方标识的字段（如手机号、邮箱等）</p>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="消息模板" required>
+                        <el-input v-model="taskForm.messageTemplate" type="textarea" :rows="4"
+                            placeholder="请输入消息模板，使用${字段名}插入数据值&#10;例如：尊敬的${name}，您的订单${order_no}金额${amount}元已逾期，请尽快处理！"
+                            id="input-message-template" />
+                        <div class="template-hint" style="margin-top:6px;">
+                            <p>💡 使用 <code>${字段名}</code> 插入数据库字段值，可点击下方字段快速插入：</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+                                <el-tag v-for="col in currentColumns" :key="col.columnName" size="small"
+                                    style="cursor:pointer;" @click="insertMessageField(col.columnName)">
+                                    {{ col.columnName }}
+                                    <span v-if="col.columnComment" style="color:#909399;margin-left:2px;">({{
+                                        col.columnComment }})</span>
+                                </el-tag>
+                            </div>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="钉钉Webhook">
+                        <el-input v-model="taskForm.dingtalkWebhook" placeholder="请输入钉钉机器人Webhook地址（可选）"
+                            id="input-webhook" />
+                        <div class="template-hint" style="margin-top:6px;">
+                            <p>💡 未配置Webhook时，提醒内容仅记录到日志中</p>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="任务状态">
+                        <el-switch v-model="taskForm.statusBool" active-text="启用" inactive-text="停用"
+                            id="switch-status" />
+                    </el-form-item>
+                </div>
+            </el-form>
+
+            <template #footer>
+                <el-button @click="taskFormVisible = false">取消</el-button>
+                <el-button type="primary" @click="saveTask" :loading="saveLoading" id="btn-save-task">
+                    {{ taskFormMode === 'create' ? '创建任务' : '保存修改' }}
+                </el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script src="https://unpkg.com/vue@3.3.13/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus@2.4.4/dist/index.full.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+
+</html>

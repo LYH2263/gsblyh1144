@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: reminder-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: reminder123
+      MYSQL_DATABASE: reminder_db
+      TZ: Asia/Shanghai
+    ports:
+      - "11441:3306"
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql-data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone='+08:00' --character-set-client-handshake=FALSE --init-connect='SET NAMES utf8mb4'
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - reminder-net
+
+  app:
+    build: .
+    container_name: reminder-app
+    ports:
+      - "1144:1144"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reminder_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: reminder123
+      TZ: Asia/Shanghai
+    restart: on-failure
+    networks:
+      - reminder-net
+
+volumes:
+  mysql-data:
+
+
+networks:
+  reminder-net:
+    driver: bridge
