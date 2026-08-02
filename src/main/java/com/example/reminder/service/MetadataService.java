@@ -1,5 +1,6 @@
 package com.example.reminder.service;
 
+import com.example.reminder.util.SqlSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +18,7 @@ public class MetadataService {
     private JdbcTemplate jdbcTemplate;
 
     /**
-     * 获取数据库中所有表名和注释
+     * 获取业务表白名单中的表名和注释
      */
     public List<Map<String, String>> getAllTables() {
         List<Map<String, String>> tables = new ArrayList<>();
@@ -27,8 +28,12 @@ public class MetadataService {
                             "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' " +
                             "ORDER BY TABLE_NAME");
             for (Map<String, Object> row : rows) {
+                String tableName = String.valueOf(row.get("TABLE_NAME"));
+                if (!SqlSanitizer.isBusinessTable(tableName)) {
+                    continue;
+                }
                 Map<String, String> table = new HashMap<>();
-                table.put("tableName", String.valueOf(row.get("TABLE_NAME")));
+                table.put("tableName", tableName);
                 table.put("tableComment", String.valueOf(row.getOrDefault("TABLE_COMMENT", "")));
                 tables.add(table);
             }
@@ -39,9 +44,11 @@ public class MetadataService {
     }
 
     /**
-     * 获取指定表的所有字段信息
+     * 获取指定业务表的所有字段信息
      */
     public List<Map<String, String>> getTableColumns(String tableName) {
+        SqlSanitizer.assertBusinessTable(tableName);
+
         List<Map<String, String>> columns = new ArrayList<>();
         try {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -65,9 +72,11 @@ public class MetadataService {
     }
 
     /**
-     * 预览表数据（前10条）
+     * 预览业务表数据（前10条）
      */
     public List<Map<String, Object>> previewTableData(String tableName) {
+        SqlSanitizer.assertBusinessTable(tableName);
+
         try {
             return jdbcTemplate.queryForList("SELECT * FROM `" + tableName + "` LIMIT 10");
         } catch (Exception e) {

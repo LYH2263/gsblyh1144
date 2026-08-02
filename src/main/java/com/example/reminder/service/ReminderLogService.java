@@ -16,10 +16,16 @@ public class ReminderLogService {
 
     /**
      * 分页查询日志
+     * 非管理员只能查看自己创建任务的发送日志
      */
-    public IPage<ReminderLog> getLogPage(int pageNum, int pageSize, Long taskId, String keyword) {
+    public IPage<ReminderLog> getLogPage(int pageNum, int pageSize, Long taskId, String keyword,
+                                         String currentUser, String role) {
         Page<ReminderLog> page = new Page<>(pageNum, pageSize);
         QueryWrapper<ReminderLog> wrapper = new QueryWrapper<>();
+
+        if (!"ADMIN".equals(role)) {
+            wrapper.apply("task_id IN (SELECT id FROM reminder_task WHERE create_user = {0})", currentUser);
+        }
 
         if (taskId != null) {
             wrapper.eq("task_id", taskId);

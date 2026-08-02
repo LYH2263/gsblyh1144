@@ -1,0 +1,3 @@
+com\example\reminder\exception\ForbiddenException.class
+com\example\reminder\config\GlobalExceptionHandler.class
+com\example\reminder\service\DingTalkSendResult.class
