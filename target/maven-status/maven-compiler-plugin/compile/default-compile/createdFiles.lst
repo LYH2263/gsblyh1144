@@ -1,0 +1,4 @@
+com\example\reminder\dto\DingTalkSendResult.class
+com\example\reminder\exception\NonBusinessTableException.class
+com\example\reminder\exception\ForbiddenException.class
+com\example\reminder\exception\GlobalExceptionHandler.class
